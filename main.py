@@ -1,16 +1,138 @@
-# This is a sample Python script.
+from torch_geometric.data import HeteroData
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+from data_loader import DataLoader
+from graph_builder import GraphBuilder, text_to_bert_embedding
+from model import DuplicatePredictor
+from train import train_model
+from args import parse_args
+import torch
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+def get_form_hetero_graph(hetero_data, edge_name, idx):
+    # 'author', 'affiliated_with', 'organization'
+    author_organisation_edge_index = hetero_data[edge_name].edge_index
+    organisation_mask = torch.isin(author_organisation_edge_index[0], idx)
+    selected_author_organisation_edge_idx = author_organisation_edge_index[:, organisation_mask]
+    selected_org_indices = torch.unique(selected_author_organisation_edge_idx[1])
+    return selected_author_organisation_edge_idx, selected_org_indices
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+def sub_graph_for_testing(hetero_data: HeteroData, indexes):
+    authors_idx = indexes
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    subgraph = HeteroData()
+    subgraph['author'].x = hetero_data['author'].x[authors_idx]
+
+    author_paper_edge_index = hetero_data['author', 'writes', 'paper'].edge_index
+    paper_mask = torch.isin(author_paper_edge_index[0], authors_idx)
+    selected_author_paper_edge_idx = author_paper_edge_index[:, paper_mask]
+    selected_paper_indices = torch.unique(selected_author_paper_edge_idx[1])
+    subgraph['paper'].x = hetero_data['paper'].x[selected_paper_indices]
+
+    # author_organisation_edge_index = hetero_data['author', 'affiliated_with', 'organization'].edge_index
+    # organisation_mask = torch.isin(author_organisation_edge_index[0], authors_idx)
+    # selected_author_organisation_edge_idx = author_organisation_edge_index[:, organisation_mask]
+    # selected_org_indices = torch.unique(selected_author_organisation_edge_idx[1])
+    selected_author_organisation_edge_idx, selected_org_indices = get_form_hetero_graph(hetero_data, (
+        'author', 'affiliated_with', 'organization'), authors_idx)
+    subgraph['organization'].x = hetero_data['organization'].x[selected_org_indices]
+    # TODO unify function
+    paper_venue_edge_idx = hetero_data['paper', 'published_in', 'venue'].edge_index
+    venue_mask = torch.isin(paper_venue_edge_idx[0], selected_paper_indices)
+    selected_paper_venue_edge_idx = paper_venue_edge_idx[:, venue_mask]
+    selected_venue_indices = torch.unique(selected_paper_venue_edge_idx[1])
+    subgraph['venue'].x = hetero_data['venue'].x[selected_venue_indices]
+
+    author_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(authors_idx.tolist())}
+    paper_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(selected_paper_indices.tolist())}
+    venue_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(selected_venue_indices.tolist())}
+    organisation_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(selected_org_indices.tolist())}
+
+    new_author_paper_edge_index = selected_author_paper_edge_idx.clone()
+    for i in range(selected_author_paper_edge_idx.shape[1]):
+        new_author_paper_edge_index[0, i] = author_mapping[selected_author_paper_edge_idx[0, i].item()]
+        new_author_paper_edge_index[1, i] = paper_mapping[selected_author_paper_edge_idx[1, i].item()]
+
+    new_author_organisation_index = selected_author_organisation_edge_idx.clone()
+    for i in range(selected_author_organisation_edge_idx.shape[1]):
+        new_author_organisation_index[0, i] = author_mapping[selected_author_organisation_edge_idx[0, i].item()]
+        new_author_organisation_index[1, i] = organisation_mapping[selected_author_organisation_edge_idx[1, i].item()]
+
+    new_paper_venue_edge_index = selected_paper_venue_edge_idx.clone()
+    for i in range(selected_paper_venue_edge_idx.shape[1]):
+        new_paper_venue_edge_index[0, i] = paper_mapping[selected_paper_venue_edge_idx[0, i].item()]
+        new_paper_venue_edge_index[1, i] = venue_mapping[selected_paper_venue_edge_idx[1, i].item()]
+
+    subgraph['author', 'affiliated_with', 'organization'].edge_index = new_author_organisation_index
+    subgraph['author', 'writes', 'paper'].edge_index = new_author_paper_edge_index
+    subgraph['paper', 'published_in', 'venue'].edge_index = new_paper_venue_edge_index
+
+    return subgraph
+
+
+def main():
+    args = parse_args()
+    # Загрузка данных
+    data_loader = DataLoader(args.root)
+
+    # Построение графа
+    graph_builder = GraphBuilder(data_loader)
+    hetero_data = graph_builder.build_hetero_data()
+    print(hetero_data)
+    hetero_data.validate()
+    author_embedding, paper_embedding, venue_embedding, organization_embedding \
+        = text_to_bert_embedding(hetero_data.author_text_features, hetero_data.paper_text_features,
+                                 hetero_data.venue_text_features, hetero_data.organization_text_features,
+                                 root=args.output_dir, model_name=args.model_name, device=args.device)
+    hetero_data['author'].x = author_embedding
+    hetero_data['paper'].x = paper_embedding
+    hetero_data['venue'].x = venue_embedding
+    hetero_data['organization.x'].x = organization_embedding
+
+    hetero_data = sub_graph_for_testing(hetero_data, torch.tensor([0, 1, 2], dtype=torch.long))
+
+    print(hetero_data)
+    hetero_data.validate()
+
+    # Создание дубликатов
+    hetero_data_with_duplicates = graph_builder.create_duplicates(hetero_data, 2)
+
+    print("Граф построен:")
+    print(hetero_data_with_duplicates)
+    hetero_data_with_duplicates.validate()
+
+    # Определение типов узлов и ребер
+    node_types = ['author', 'paper', 'organization', 'venue']
+    edge_types = [
+        ('author', 'writes', 'paper'),
+        ('paper', 'published_in', 'venue'),
+        ('author', 'affiliated_with', 'organization'),
+        ('author', 'duplicate', 'author')
+    ]
+
+    hetero_data_with_duplicates_and_false_edges = graph_builder.prepare_train_data(hetero_data_with_duplicates)
+    print(hetero_data_with_duplicates_and_false_edges)
+    hetero_data_with_duplicates_and_false_edges.validate()
+    # Создание модели
+
+    model = DuplicatePredictor(
+        hidden_channels=args.hidden_channels,
+        num_node_types=node_types,
+        num_edge_types=edge_types,
+        num_layers=args.num_layers,
+        dropout=args.dropout
+    )
+
+    # Обучение модели
+    trained_model = train_model(model, hetero_data_with_duplicates_and_false_edges, epochs=args.epochs,
+                                learning_rate=args.learning_rate, weight_decay=args.weight_decay,
+                                device=args.device)
+
+    # Сохранение модели
+    torch.save(trained_model.state_dict(), 'duplicate_detection_model.pth')
+
+    print("Обучение завершено!")
+
+
+if __name__ == "__main__":
+    main()
