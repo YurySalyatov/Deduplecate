@@ -29,7 +29,7 @@ class GraphBuilder:
         paper_venue_edges = []
         author_org_edges = []
         paper_text_features = [""] * len(self.entity_mappings['paper'])
-        author_text_features = [""] * len(self.entity_mappings['author'])
+        # author_text_features = [""] * len(self.entity_mappings['author'])
         venue_text_features = [""] * len(self.entity_mappings['venue'])
         organization_text_features = [""] * len(self.entity_mappings['organization'])
 
@@ -49,8 +49,8 @@ class GraphBuilder:
 
             for author in paper_data.get('authors', []):
                 author_idx = self.entity_mappings['author'][author['id']]
-                if author_text_features[author_idx] == "":
-                    author_text_features[author_idx] = f'author_{author_idx}'
+                # if author_text_features[author_idx] == "":
+                #     author_text_features[author_idx] = f'author_{author_idx}'
                 # Связь author-paper
                 author_paper_edges.append([author_idx, paper_idx])
 
@@ -78,7 +78,7 @@ class GraphBuilder:
 
         self.original_data = data
         data.paper_text_features = paper_text_features
-        data.author_text_features = author_text_features
+        # data.author_text_features = author_text_features
         data.venue_text_features = venue_text_features
         data.organization_text_features = organization_text_features
         return data
@@ -90,7 +90,8 @@ class GraphBuilder:
         # Создание дубликатов авторов
         total_authors = num_authors * (num_duplicates + 1)
         data['author'].x = torch.arange(total_authors).reshape(-1, 1).float()
-
+        # text_features = data.author_text_features
+        new_text_features = [""] * total_authors
         # Создание связей между оригинальными авторами и их дубликатами
         duplicate_edges = []
         org_edges = data['author', 'affiliated_with', 'organization'].edge_index
@@ -99,8 +100,9 @@ class GraphBuilder:
         for orig_author_idx in range(num_authors):
             duplicate_ind = [num_authors * dup_num + orig_author_idx for dup_num in range(num_duplicates + 1)]
             for i in range(len(duplicate_ind)):
+                ind1 = duplicate_ind[i]
+                new_text_features[ind1] = f"author_{ind1}"
                 for j in range(i + 1, len(duplicate_ind)):
-                    ind1 = duplicate_ind[i]
                     ind2 = duplicate_ind[j]
                     # TODO necessary duplicate edges?
                     # if ind1 == ind2:
@@ -134,6 +136,7 @@ class GraphBuilder:
             )
         data['author', 'affiliated_with', 'organization'].edge_index = torch.cat(
             (org_edges, new_authors_org), dim=1)
+        data.author_text_features = new_text_features
         return data
 
     def prepare_train_data(self, data: HeteroData, train_ratio=0.64, val_ratio=0.16) -> HeteroData:
