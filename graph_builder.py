@@ -220,6 +220,6 @@ def text_to_bert_embedding(author_text, paper_text, venue_text, organization_tex
     paper_embedding = embedding[author_len:author_len + paper_len, :]
     venue_embedding = embedding[author_len + paper_len:author_len + paper_len + venue_len, :]
     organization_embedding = embedding[author_len + paper_len + venue_len:, :]
-    torch.save({'author': author_embedding, 'paper': paper_embedding, 'venue': venue_embedding,
-                'organization': organization_embedding}, cache_path)
+    # torch.save({'author': author_embedding, 'paper': paper_embedding, 'venue': venue_embedding,
+    #             'organization': organization_embedding}, cache_path)
     return author_embedding, paper_embedding, venue_embedding, organization_embedding
