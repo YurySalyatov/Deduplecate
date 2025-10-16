@@ -79,14 +79,15 @@ def main():
     args = parse_args()
     # Загрузка данных
     data_loader = DataLoader(args.root)
-    os.mkdir(args.output_dir)
+    if not os.path.exists(args.output_dir):
+        os.mkdir(args.output_dir)
     # Построение графа
     graph_builder = GraphBuilder(data_loader)
     hetero_data = graph_builder.build_hetero_data()
     print(hetero_data)
     hetero_data.validate()
 
-    hetero_data = sub_graph_for_testing(hetero_data, torch.tensor([0, 1, 2], dtype=torch.long))
+    # hetero_data = sub_graph_for_testing(hetero_data, torch.tensor([0, 1, 2], dtype=torch.long))
 
     print(hetero_data)
     hetero_data.validate()
