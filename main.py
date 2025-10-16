@@ -86,8 +86,9 @@ def main():
     hetero_data = graph_builder.build_hetero_data()
     print(hetero_data)
     hetero_data.validate()
-
-    # hetero_data = sub_graph_for_testing(hetero_data, torch.tensor([0, 1, 2], dtype=torch.long))
+    data_loader.load_test_data()
+    test_idx = data_loader.load_tset_idx()
+    hetero_data = sub_graph_for_testing(hetero_data, torch.tensor(test_idx, dtype=torch.long))
 
     print(hetero_data)
     hetero_data.validate()
