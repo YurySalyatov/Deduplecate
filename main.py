@@ -22,15 +22,15 @@ def get_form_hetero_graph(hetero_data, edge_name, idx):
 def sub_graph_for_testing(hetero_data: HeteroData, indexes):
     authors_idx = indexes
 
-    subgraph = HeteroData()
-    subgraph['author'].x = hetero_data['author'].x[authors_idx]
+    # subgraph = HeteroData()
+    hetero_data['author'].x = hetero_data['author'].x[authors_idx]
 
     author_paper_edge_index = hetero_data['author', 'writes', 'paper'].edge_index
     paper_mask = torch.isin(author_paper_edge_index[0], authors_idx)
     selected_author_paper_edge_idx = author_paper_edge_index[:, paper_mask]
     selected_paper_indices = torch.unique(selected_author_paper_edge_idx[1])
-    subgraph['paper'].x = hetero_data['paper'].x[selected_paper_indices]
-    subgraph.paper_text_features = [hetero_data.paper_text_features[i] for i in selected_paper_indices]
+    hetero_data['paper'].x = hetero_data['paper'].x[selected_paper_indices]
+    hetero_data.paper_text_features = [hetero_data.paper_text_features[i] for i in selected_paper_indices]
 
     # author_organisation_edge_index = hetero_data['author', 'affiliated_with', 'organization'].edge_index
     # organisation_mask = torch.isin(author_organisation_edge_index[0], authors_idx)
@@ -38,15 +38,15 @@ def sub_graph_for_testing(hetero_data: HeteroData, indexes):
     # selected_org_indices = torch.unique(selected_author_organisation_edge_idx[1])
     selected_author_organisation_edge_idx, selected_org_indices = get_form_hetero_graph(hetero_data, (
         'author', 'affiliated_with', 'organization'), authors_idx)
-    subgraph['organization'].x = hetero_data['organization'].x[selected_org_indices]
-    subgraph.organization_text_features = [hetero_data.organization_text_features[i] for i in selected_org_indices]
+    hetero_data['organization'].x = hetero_data['organization'].x[selected_org_indices]
+    hetero_data.organization_text_features = [hetero_data.organization_text_features[i] for i in selected_org_indices]
     # TODO unify function
     paper_venue_edge_idx = hetero_data['paper', 'published_in', 'venue'].edge_index
     venue_mask = torch.isin(paper_venue_edge_idx[0], selected_paper_indices)
     selected_paper_venue_edge_idx = paper_venue_edge_idx[:, venue_mask]
     selected_venue_indices = torch.unique(selected_paper_venue_edge_idx[1])
-    subgraph['venue'].x = hetero_data['venue'].x[selected_venue_indices]
-    subgraph.venue_text_features = [hetero_data.venue_text_features[i] for i in selected_venue_indices]
+    hetero_data['venue'].x = hetero_data['venue'].x[selected_venue_indices]
+    hetero_data.venue_text_features = [hetero_data.venue_text_features[i] for i in selected_venue_indices]
 
     author_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(authors_idx.tolist())}
     paper_mapping = {old_idx: new_idx for new_idx, old_idx in enumerate(selected_paper_indices.tolist())}
@@ -68,11 +68,20 @@ def sub_graph_for_testing(hetero_data: HeteroData, indexes):
         new_paper_venue_edge_index[0, i] = paper_mapping[selected_paper_venue_edge_idx[0, i].item()]
         new_paper_venue_edge_index[1, i] = venue_mapping[selected_paper_venue_edge_idx[1, i].item()]
 
-    subgraph['author', 'affiliated_with', 'organization'].edge_index = new_author_organisation_index
-    subgraph['author', 'writes', 'paper'].edge_index = new_author_paper_edge_index
-    subgraph['paper', 'published_in', 'venue'].edge_index = new_paper_venue_edge_index
+    hetero_data['author', 'affiliated_with', 'organization'].edge_index = new_author_organisation_index
+    hetero_data['author', 'writes', 'paper'].edge_index = new_author_paper_edge_index
+    hetero_data['paper', 'published_in', 'venue'].edge_index = new_paper_venue_edge_index
 
-    return subgraph
+    return hetero_data
+
+
+def check_features(hetero_data):
+    array = ['author_text_features', 'venue_text_features', 'paper_text_features', 'organization_text_features']
+    for text_features in array:
+        if text_features in hetero_data:
+            print(len(hetero_data[text_features]), f"is len of {text_features}")
+        else:
+            print(f"No {text_features}")
 
 
 def main():
@@ -81,23 +90,26 @@ def main():
     data_loader = DataLoader(args.root)
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
+
     # Построение графа
     graph_builder = GraphBuilder(data_loader)
     hetero_data = graph_builder.build_hetero_data()
     print(hetero_data)
+    check_features(hetero_data)
     hetero_data.validate()
+
     data_loader.load_test_data()
     test_idx = data_loader.load_tset_idx()
     hetero_data = sub_graph_for_testing(hetero_data, torch.tensor(test_idx, dtype=torch.long))
-
     print(hetero_data)
+    check_features(hetero_data)
     hetero_data.validate()
 
     # Создание дубликатов
     hetero_data_with_duplicates = graph_builder.create_duplicates(hetero_data, 2)
-
     print("Граф построен:")
     print(hetero_data_with_duplicates)
+    check_features(hetero_data_with_duplicates)
     hetero_data_with_duplicates.validate()
 
     author_embedding, paper_embedding, venue_embedding, organization_embedding \
@@ -122,6 +134,7 @@ def main():
 
     hetero_data_with_duplicates_and_false_edges = graph_builder.prepare_train_data(hetero_data_with_duplicates)
     print(hetero_data_with_duplicates_and_false_edges)
+    check_features(hetero_data_with_duplicates_and_false_edges)
     hetero_data_with_duplicates_and_false_edges.validate()
     # Создание модели
 
