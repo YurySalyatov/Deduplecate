@@ -203,7 +203,7 @@ def text_to_embeddings(texts, model, batch_size=16):
         ).cpu()
         embeddings.append(batch_embedding)
 
-    return embeddings
+    return torch.cat(embeddings)
 
 
 def text_to_bert_embedding(author_text, paper_text, venue_text, organization_text, root, model_name, device):
