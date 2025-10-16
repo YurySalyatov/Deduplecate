@@ -3,7 +3,7 @@ import os.path
 from torch_geometric.data import HeteroData
 
 from data_loader import DataLoader
-from graph_builder import GraphBuilder, text_to_bert_embedding
+from graph_builder import GraphBuilder, text_to_bert_embedding, text_to_embeddings
 from model import DuplicatePredictor
 from train import train_model
 from args import parse_args
@@ -112,12 +112,18 @@ def main():
     check_features(hetero_data_with_duplicates)
     hetero_data_with_duplicates.validate()
 
-    author_embedding, paper_embedding, venue_embedding, organization_embedding \
-        = text_to_bert_embedding(hetero_data_with_duplicates.author_text_features,
-                                 hetero_data_with_duplicates.paper_text_features,
-                                 hetero_data_with_duplicates.venue_text_features,
-                                 hetero_data_with_duplicates.organization_text_features,
-                                 root=args.output_dir, model_name=args.model_name, device=args.device)
+    # author_embedding, paper_embedding, venue_embedding, organization_embedding \
+    #     = text_to_bert_embedding(hetero_data_with_duplicates.author_text_features,
+    #                              hetero_data_with_duplicates.paper_text_features,
+    #                              hetero_data_with_duplicates.venue_text_features,
+    #                              hetero_data_with_duplicates.organization_text_features,
+    #                              root=args.output_dir, model_name=args.model_name, device=args.device)
+    from sentence_transformers import SentenceTransformer
+    bert = SentenceTransformer(args.model_name, cache_folder=os.path.join(args.output_dir, "sbert"), device=args.device)
+    author_embedding = text_to_embeddings(hetero_data_with_duplicates.author_text_features, bert, 32)
+    paper_embedding = text_to_embeddings(hetero_data_with_duplicates.paper_text_features, bert, 32)
+    venue_embedding = text_to_embeddings(hetero_data_with_duplicates.venue_text_features, bert, 32)
+    organization_embedding = text_to_embeddings(hetero_data_with_duplicates.organization_text_features, bert, 32)
     hetero_data_with_duplicates['author'].x = author_embedding
     hetero_data_with_duplicates['paper'].x = paper_embedding
     hetero_data_with_duplicates['venue'].x = venue_embedding

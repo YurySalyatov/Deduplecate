@@ -190,6 +190,22 @@ class GraphBuilder:
         return data
 
 
+def text_to_embeddings(texts, model, batch_size=16):
+    embeddings = []
+    size = len(texts)
+    for i in range(0, size, batch_size):
+        batch = texts[i:min(i + batch_size, size)]
+        batch_embedding = model.encode(
+            batch,
+            convert_to_tensor=True,
+            show_progress_bar=False,
+            normalize_embeddings=True
+        ).cpu()
+        embeddings.append(batch_embedding)
+
+    return embeddings
+
+
 def text_to_bert_embedding(author_text, paper_text, venue_text, organization_text, root, model_name, device):
     cache_path = os.path.join(root, f"aminer_text_{model_name}.pt")
     if os.path.exists(cache_path):
