@@ -48,6 +48,7 @@ def train_model(model, data, epochs, learning_rate, weight_decay, device, save_r
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                                  weight_decay=weight_decay)
     model.to(device)
+    data.to(device)
     trainer = Trainer(model, optimizer, device)
     save_path = os.path.join(save_root_path, "best_model.pt")
 
