@@ -111,9 +111,9 @@ class GraphBuilder:
                     duplicate_edges.append([ind1, ind2])
             org_mask = torch.isin(org_edges[0], orig_author_idx)
             probably_orgs = org_edges[:, org_mask]
-            target_orgs = probably_orgs[1, torch.randint(0, probably_orgs.size(1), (num_duplicates,))]
             # TODO maybe not only 1 org, but range(1, len(orgs))?
-            if target_orgs.size(0) > 0:
+            if probably_orgs.size(1) > 0:
+                target_orgs = probably_orgs[1, torch.randint(0, probably_orgs.size(1), (num_duplicates,))]
                 new_authors_org_edges = torch.stack([torch.tensor(duplicate_ind[1:], dtype=torch.long), target_orgs])
                 new_authors_org = torch.cat((new_authors_org, new_authors_org_edges), dim=1)
             author_pairs_mask = torch.isin(paper_edges[0], orig_author_idx)
